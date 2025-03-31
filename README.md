@@ -16,14 +16,18 @@ A chatbot with a talking 3D avatar that responds using speech and text.
    ```sh
    git clone https://github.com/your-username/3Davatar-based-chatbot.git
    cd 3Davatar-based-chatbot
-2. npm init -y
+2. Install the node modules:
+   ```sh
+   npm init -y
    npm install express axios cors
  
 ## Running
 
-1. node server.js
-2. python -m http.server
-3. Open a web browser and go to: http://localhost:8000
+1. Run the following in two separate terminals in the same directory:
+   ```sh
+   node server.js
+   python -m http.server
+2. Open a web browser and go to: http://localhost:8000
 
 
 
