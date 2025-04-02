@@ -47,8 +47,9 @@
         ttsEndpoint: "https://eu-texttospeech.googleapis.com/v1beta1/text:synthesize",
         ttsApikey: ttsApiKey, 
         lipsyncModules: ["en"],
-        cameraView: "upper"
+        cameraView: "full"
       });
+
 
       const nodeLoading = document.getElementById('loading');
       try {
@@ -57,8 +58,8 @@
           url: 'https://models.readyplayer.me/67eabf208e3f1295458168aa.glb?textureQuality=high',
           body: 'M',
           avatarMood: 'neutral',
-          ttsLang: "en-GB",
-          ttsVoice: "en-GB-Standard-A",
+          ttsLang: "en-US",
+          ttsVoice: "en-US-Standard-D",
           lipsyncLang: 'en'
         });
         nodeLoading.style.display = 'none';
