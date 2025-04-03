@@ -26,8 +26,6 @@ A chatbot with a talking 3D avatar that responds using speech and text.
 1. Run the following in two separate terminals in the same directory:
    ```sh
    node server.js
-   python -m http.server
-2. Open a web browser and go to: http://localhost:8000
 
 
 
