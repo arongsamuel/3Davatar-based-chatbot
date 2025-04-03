@@ -45,7 +45,17 @@ app.post("/chat", async (req, res) => {
             );
 
             const messages = [
-                { role: "system", content: "You are a medical triage assistant following the Netherlands Triage Standard (NTS). In the first 10 questions, determine urgency (U0-U5). If emergency (U0-U1), recommend calling emergency services. If non-urgent (U2-U5), allow follow-up questions for clarification. After 10 questions, transition to follow-up phase (unlimited questions)." },
+                { role: "system", content: `You are a medical triage assistant following the World Health Organization (WHO) triage guidelines. Your goal is to assess the patient's urgency quickly and accurately in **10 questions or fewer**.  
+   
+                    Classify urgency as:  
+                    - **Emergency (RED)**: Immediate life-threatening condition—advise calling emergency services.  
+                    - **Urgent (YELLOW)**: Requires medical attention soon—recommend visiting a healthcare provider.  
+                    - **Non-urgent (GREEN)**: Can be managed with self-care or scheduled consultation.  
+                    
+                    If the patient is **RED**, recommend emergency services immediately. If **YELLOW or GREEN**, allow limited follow-up questions (max 3) to refine the recommendation.  
+                    
+                    Be **direct and efficient**, ensuring decisions are made **as fast as possible** without unnecessary steps.` 
+                    },
                 ...conversationHistory,
                 { role: "user", content: userMessage }
             ];
@@ -55,10 +65,10 @@ app.post("/chat", async (req, res) => {
                 "https://api.openai.com/v1/chat/completions",
                 {
                     model: "gpt-4o-mini",
-                    max_tokens: 100, // Set slightly higher to avoid premature cuts
+                    max_tokens: 77, // Set slightly higher to avoid premature cuts
                     temperature: 0.7, // Control randomness
                     messages: messages,
-                    stop: ["\n\n"], // Ensures OpenAI stops naturally at a full response
+                    stop: ["###", "<|endoftext|>"], // Ensures OpenAI stops naturally at a full response
                 },
                 { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" } }
             );
