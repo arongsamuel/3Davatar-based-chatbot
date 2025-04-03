@@ -3,6 +3,7 @@ const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
 const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
 
 const app = express();
 app.use(express.json());
@@ -13,6 +14,11 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GOOGLE_TTS_API_KEY = process.env.GOOGLE_TTS_API_KEY;
+// Initialize SQLite database with a file path
+const db = new sqlite3.Database('./conversations.db');
+db.serialize(() => {
+    db.run("CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY, user_message TEXT, ai_response TEXT)");
+});
 
 // ✅ Serve the index.html file
 app.get("/", (req, res) => {
@@ -20,28 +26,60 @@ app.get("/", (req, res) => {
 });
 
 // ✅ Chatbot API Route
+// 🔹 Route to get OpenAI response with better handling
 app.post("/chat", async (req, res) => {
     try {
         const userMessage = req.body.text;
-        const openaiResponse = await axios.post(
-            "https://api.openai.com/v1/chat/completions",
-            {
-                model: "gpt-4o",
-                max_tokens: 100,
-                temperature: 0.7,
-                messages: [
-                    { role: "system", content: "You are a helpful AI assistant." },
-                    { role: "user", content: userMessage }
-                ],
-            },
-            { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" } }
-        );
 
-        res.json({ response: openaiResponse.data.choices[0].message.content });
+        // 🔹 Step 1: Retrieve past conversations
+        db.all("SELECT * FROM conversations", async (err, rows) => {
+            if (err) {
+                console.error("❌ Error fetching conversations:", err);
+                res.status(500).json({ error: "Failed to fetch conversations" });
+                return;
+            }
+
+            // 🔹 Step 2: Include relevant context in the new request
+            const conversationHistory = rows.map(row => ({ role: "user", content: row.user_message })).concat(
+                rows.map(row => ({ role: "assistant", content: row.ai_response }))
+            );
+
+            const messages = [
+                { role: "system", content: "You are a medical triage assistant following the Netherlands Triage Standard (NTS). In the first 10 questions, determine urgency (U0-U5). If emergency (U0-U1), recommend calling emergency services. If non-urgent (U2-U5), allow follow-up questions for clarification. After 10 questions, transition to follow-up phase (unlimited questions)." },
+                ...conversationHistory,
+                { role: "user", content: userMessage }
+            ];
+
+            // 🔹 Step 3: Request AI Response with a Higher Max Token Limit
+            const openaiResponse = await axios.post(
+                "https://api.openai.com/v1/chat/completions",
+                {
+                    model: "gpt-4o-mini",
+                    max_tokens: 100, // Set slightly higher to avoid premature cuts
+                    temperature: 0.7, // Control randomness
+                    messages: messages,
+                    stop: ["\n\n"], // Ensures OpenAI stops naturally at a full response
+                },
+                { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" } }
+            );
+
+            let aiText = openaiResponse.data.choices[0].message.content;
+
+            // 🔹 Step 4: Trim Excess Text (if response exceeds a reasonable length)
+            const maxLength = 500; // Adjust this based on how long you want responses
+            //if (aiText.length > maxLength) {
+            //    aiText = aiText.substring(0, maxLength).trim();
+            //}
+
+            // 🔹 Step 5: Store conversation in the database
+            db.run("INSERT INTO conversations (user_message, ai_response) VALUES (?, ?)", [userMessage, aiText]);
+
+            res.json({ response: aiText });
+        });
 
     } catch (error) {
-        console.error("Error getting OpenAI response:", error.response ? error.response.data : error.message);
-        res.status(500).json({ error: "Failed to get AI response", details: error.message });
+        console.error("❌ Error getting OpenAI response:", error);
+        res.status(500).json({ error: "Failed to get AI response" });
     }
 });
 
