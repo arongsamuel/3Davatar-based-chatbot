@@ -1,0 +1,201 @@
+<html>
+<head>
+  <title>Talking Head - AI Integration with Chat Screen</title>
+  <style>
+    body, html { width:100%; height:100%; margin: auto; position: relative; background-color: #202020; color: white; display: flex; }
+    #avatar { display: block; width:70%; height:100%; }
+    #chat-container { display: flex; width:50%; height:100%; justify-content: center; align-items: center; background-color: aliceblue; }
+    #chat { width:100%; height:90%; overflow-y: auto; background-color: #202020; padding: 10px; box-sizing: border-box;  border-radius: 10px; background-color: aliceblue; }
+    #controls { display: flex; position: absolute; bottom: 10px; right: 10px; min-height: 50px; width: 40% }
+    #text { flex: 1; height: 100%; font-family: Arial; font-size: 18px; padding: 10px; border-radius: 5px; border: none; }
+    #speak, #send, #stop { width: 100px; height: 100%; font-family: Arial; font-size: 18px; margin-left: 5px; border-radius: 5px; cursor: pointer; }
+    #loading { position: absolute; bottom: 60px; left: 10px; right: 10px; height: 30px; font-family: Arial; font-size: 18px; }
+    .message { margin-bottom: 10px; padding: 10px; border-radius: 5px; transition: opacity 0.3s; }
+    .user { background-color: #515151; color: yellow; }
+    .ai { background-color: #404040; color: white; }
+    .blurred { opacity: 0; }
+    #chat:hover .blurred { opacity: 0.2; }
+    /* Scrollbar styles */
+    #chat::-webkit-scrollbar { width: 12px; }
+    #chat::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.1); transition: background-color 0.3s; }
+    #chat:hover::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.5); }
+  </style>
+  <script type="importmap">
+  { "imports":
+    {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js/+esm",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+      "talkinghead": "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.4/modules/talkinghead.mjs"
+    }
+  }
+  </script>
+  <script type="module">
+    import { TalkingHead } from "talkinghead";
+
+    let head;
+
+    document.addEventListener('DOMContentLoaded', async function() {
+      const nodeAvatar = document.getElementById('avatar');
+
+      // Fetch the Google TTS API key from the server
+      const ttsKeyResponse = await fetch("http://localhost:3000/tts-key");
+      const ttsKeyData = await ttsKeyResponse.json();
+      const ttsApiKey = ttsKeyData.apiKey;
+
+      head = new TalkingHead(nodeAvatar, {
+        ttsEndpoint: "https://eu-texttospeech.googleapis.com/v1beta1/text:synthesize",
+        ttsApikey: ttsApiKey, 
+        lipsyncModules: ["en"],
+        cameraView: "full",
+        cameraRotateEnable: false,  // Enable rotation (if you want)
+        cameraPanEnable: false,     // Enable panning (if you want)
+        cameraZoomEnable: false,    // Enable zooming
+        cameraDistance: -3.3,
+        avatarMood: "happy", // Adjust camera rotation on X-axis
+      });
+      head.setView('full', {
+      cameraX: 0,        // Horizontal position of the camera
+      cameraY: 5,        // Vertical position of the camera
+      cameraZ: 3,        // Distance from the avatar in the Z-axis
+      cameraRotateX: Math.PI / 6, // Adjust camera rotation on X-axis
+      cameraRotateY: Math.PI / 4  // Adjust camera rotation on Y-axis
+    });
+
+
+      const nodeLoading = document.getElementById('loading');
+      try {
+        nodeLoading.textContent = "Loading...";
+        await head.showAvatar({
+          url: '/scene3.glb?textureQuality=high',
+          body: 'M',
+          avatarMood: 'neutral',
+          ttsLang: "en-US",
+          ttsVoice: "en-US-Standard-D",
+          lipsyncLang: 'en'
+
+        });
+        head.lookAt(0,2,5000)
+        nodeLoading.style.display = 'none';
+          // Wait for avatar to fully load, then reposition only the avatar
+          setTimeout(() => {
+            const avatarModel = head.scene.getObjectByName("Armature"); // Avatar's root node
+            if (avatarModel) {
+              avatarModel.position.set(0, -1.1, 0); // Adjust X, Y, Z as needed
+            } else {
+              console.warn("Avatar model not found!");
+            }
+          }, 500); // Delay to ensure loading is complete
+      } catch (error) {
+        console.log(error);
+        nodeLoading.textContent = error.toString();
+      }
+
+      const nodeSpeak = document.getElementById('speak');
+      const nodeSend = document.getElementById('send');
+      const nodeStop = document.createElement('input');
+      nodeStop.type = 'button';
+      nodeStop.value = 'Stop';
+      nodeStop.id = 'stop';
+      nodeStop.style.marginLeft = '5px';
+      nodeStop.style.borderRadius = '5px';
+      nodeStop.style.cursor = 'pointer';
+      document.getElementById('controls').appendChild(nodeStop);
+      const textInput = document.getElementById('text');
+
+      // Handle user input via Text or Mic
+      nodeSpeak.addEventListener('click', startVoiceRecognition);
+      nodeSend.addEventListener('click', () => handleUserInput(textInput.value));
+      nodeStop.addEventListener('click', stopPlayback);
+      textInput.addEventListener('keypress', function(event) {
+        if (event.key === "Enter") {
+          handleUserInput(textInput.value);
+        }
+      });
+
+      function startVoiceRecognition() {
+        try {
+          const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+          recognition.lang = 'en-US';
+          recognition.start();
+
+          recognition.onresult = function(event) {
+            const userText = event.results[0][0].transcript;
+            console.log("🎤 User says:", userText);
+            handleUserInput(userText);
+          };
+
+          recognition.onerror = function(event) {
+            console.error("Speech recognition error:", event.error);
+          };
+
+        } catch (error) {
+          console.error("Error:", error);
+        }
+      }
+
+      async function handleUserInput(userText) {
+        if (!userText.trim()) return;
+
+        // Display user message in chat
+        displayMessage(userText, 'user');
+        textInput.value = ""; // Clear input box
+
+        try {
+          const aiResponse = await fetch("http://localhost:3000/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: userText })
+          }).then(res => res.json());
+
+          const aiText = aiResponse.response;
+          console.log("🤖 AI says:", aiText);
+
+          // Display AI message in chat
+          displayMessage(aiText, 'ai');
+
+          head.speakText(aiText); // Speak AI response
+
+        } catch (error) {
+          console.error("❌ Error:", error);
+        }
+      }
+
+      function stopPlayback() {
+        head.stopSpeaking();
+      }
+
+      document.addEventListener("visibilitychange", function () {
+        document.visibilityState === "visible" ? head.start() : head.stop();
+      });
+
+      function displayMessage(text, sender) {
+        const chatContainer = document.getElementById('chat');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${sender}`;
+        messageDiv.textContent = text;
+        chatContainer.appendChild(messageDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        // Apply blur effect to older messages
+        const messages = chatContainer.getElementsByClassName('message');
+        for (let i = 0; i < messages.length - 2; i++) {
+          messages[i].classList.add('blurred');
+        }
+      }
+
+    });
+  </script>
+</head>
+<body>
+  <div id="avatar"></div>
+  <div id="chat-container">
+    <div id="chat"></div>
+  </div>
+  <div id="controls">
+    <input id="text" type="text" placeholder="Type your message...">
+    <input id="send" type="button" value="Send">
+    <input id="speak" type="button" value="Speak">
+  </div>
+  <div id="loading"></div>
+</body>
+</html>
