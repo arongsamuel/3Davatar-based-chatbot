@@ -1,13 +1,12 @@
-<!DOCTYPE html>
 <html>
 <head>
   <title>Talking Head - AI Integration with Chat Screen</title>
   <style>
-    body, html { width:90%; height:90%; max-width: 800px; margin: auto; position: relative; background-color: #202020; color: white; display: flex; }
+    body, html { width:100%; height:100%; margin: auto; position: relative; background-color: #202020; color: white; display: flex; }
     #avatar { display: block; width:70%; height:100%; }
-    #chat-container { display: flex; width:50%; height:100%; justify-content: center; align-items: center; }
-    #chat { width:100%; height:50%; overflow-y: auto; background-color: #202020; padding: 10px; box-sizing: border-box;  border-radius: 10px; }
-    #controls { display: flex; position: absolute; bottom: 10px; left: 10px; right: 10px; height: 50px; }
+    #chat-container { display: flex; width:50%; height:100%; justify-content: center; align-items: center; background-color: aliceblue; }
+    #chat { width:100%; height:90%; overflow-y: auto; background-color: #202020; padding: 10px; box-sizing: border-box;  border-radius: 10px; background-color: aliceblue; }
+    #controls { display: flex; position: absolute; bottom: 10px; right: 10px; min-height: 50px; width: 40% }
     #text { flex: 1; height: 100%; font-family: Arial; font-size: 18px; padding: 10px; border-radius: 5px; border: none; }
     #speak, #send, #stop { width: 100px; height: 100%; font-family: Arial; font-size: 18px; margin-left: 5px; border-radius: 5px; cursor: pointer; }
     #loading { position: absolute; bottom: 60px; left: 10px; right: 10px; height: 30px; font-family: Arial; font-size: 18px; }
@@ -36,7 +35,18 @@
     let head;
 
     document.addEventListener('DOMContentLoaded', async function() {
+        // Client-side session memory
+        let sessionMemory = [];
+
       const nodeAvatar = document.getElementById('avatar');
+      const nodeLoading = document.getElementById('loading');
+      const toggleButton = document.getElementById('toggle-avatar');
+
+      // Define two avatar URLs
+      const avatar1Url = '/scene-height.glb?morphTargets=ARKit,Oculus+Visemes,mouthOpen,mouthSmile,eyesClosed,eyesLookUp,eyesLookDown&textureQuality=high';
+      const avatar2Url = '/6814b8d58ab2ab9249133b1d.glb?morphTargets=ARKit,Oculus+Visemes,mouthOpen,mouthSmile,eyesClosed,eyesLookUp,eyesLookDown&textureQuality=high';
+
+      let currentAvatar = 1; // Track which avatar is currently loaded
 
       // Fetch the Google TTS API key from the server
       const ttsKeyResponse = await fetch("http://localhost:3000/tts-key");
@@ -47,27 +57,54 @@
         ttsEndpoint: "https://eu-texttospeech.googleapis.com/v1beta1/text:synthesize",
         ttsApikey: ttsApiKey, 
         lipsyncModules: ["en"],
-        cameraView: "full"
+        cameraView: "full",
+        cameraRotateEnable: false,  // Enable rotation (if you want)
+        cameraPanEnable: false,     // Enable panning (if you want)
+        cameraZoomEnable: false,    // Enable zooming
+        cameraDistance: -3.3,
+        avatarMood: "happy", // Adjust camera rotation on X-axis
       });
+      head.setView('full', {
+      cameraX: 0,        // Horizontal position of the camera
+      cameraY: 5,        // Vertical position of the camera
+      cameraZ: 3,        // Distance from the avatar in the Z-axis
+      cameraRotateX: Math.PI / 6, // Adjust camera rotation on X-axis
+      cameraRotateY: Math.PI / 4  // Adjust camera rotation on Y-axis
+    });
 
 
-      const nodeLoading = document.getElementById('loading');
-      try {
-        nodeLoading.textContent = "Loading...";
-        await head.showAvatar({
-          url: 'https://models.readyplayer.me/67eabf208e3f1295458168aa.glb?textureQuality=high',
-          body: 'M',
-          avatarMood: 'neutral',
-          ttsLang: "en-US",
-          ttsVoice: "en-US-Standard-D",
-          lipsyncLang: 'en'
-        });
-        nodeLoading.style.display = 'none';
-      } catch (error) {
-        console.log(error);
-        nodeLoading.textContent = error.toString();
+      //const nodeLoading = document.getElementById('loading');
+      async function loadAvatar(url) {
+        try {
+          nodeLoading.textContent = "Loading...";
+          // Determine the ttsVoice based on the URL
+          const ttsVoice = url === avatar1Url ? "en-US-Standard-D" : "en-US-Standard-C";
+          await head.showAvatar({
+            url: url,
+            body: 'M',
+            avatarMood: 'neutral',
+            ttsLang: "en-US",
+            ttsVoice: ttsVoice,
+            lipsyncLang: 'en'
+
+          });
+          head.lookAt(0,2,5000)
+          nodeLoading.style.display = 'none';
+            // Wait for avatar to fully load, then reposition only the avatar
+            setTimeout(() => {
+              const avatarModel = head.scene.getObjectByName("Armature"); // Avatar's root node
+              if (avatarModel) {
+                avatarModel.position.set(0, -1.1, 0); // Adjust X, Y, Z as needed
+              } else {
+                console.warn("Avatar model not found!");
+              }
+            }, 500); // Delay to ensure loading is complete
+        } catch (error) {
+          console.log(error);
+          nodeLoading.textContent = error.toString();
+        }
       }
-
+      await loadAvatar(avatar1Url);
       const nodeSpeak = document.getElementById('speak');
       const nodeSend = document.getElementById('send');
       const nodeStop = document.createElement('input');
@@ -89,7 +126,12 @@
           handleUserInput(textInput.value);
         }
       });
-
+      // Toggle button logic
+  toggleButton.addEventListener('click', async () => {
+    currentAvatar = currentAvatar === 1 ? 2 : 1; // Toggle between 1 and 2
+    const avatarUrl = currentAvatar === 1 ? avatar1Url : avatar2Url;
+    await loadAvatar(avatarUrl); // Load the selected avatar
+  });
       function startVoiceRecognition() {
         try {
           const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
@@ -110,19 +152,25 @@
           console.error("Error:", error);
         }
       }
-
+      
+      
       async function handleUserInput(userText) {
         if (!userText.trim()) return;
 
         // Display user message in chat
         displayMessage(userText, 'user');
         textInput.value = ""; // Clear input box
+        const systemPrompt = "";
+
+        // Add user message to session memory
+      sessionMemory.push({ role: "user", content: userText });
+
 
         try {
           const aiResponse = await fetch("http://localhost:3000/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: userText })
+            body: JSON.stringify({ text: userText, systemPrompt: systemPrompt, sessionMemory: sessionMemory })
           }).then(res => res.json());
 
           const aiText = aiResponse.response;
@@ -131,8 +179,12 @@
           // Display AI message in chat
           displayMessage(aiText, 'ai');
 
-          head.speakText(aiText); // Speak AI response
+          // Add AI response to session memory
+        sessionMemory.push({ role: "assistant", content: aiText });
+          console.log("Session Memory:", sessionMemory); // Log session memory for debugging
 
+          head.speakText(aiText); // Speak AI response
+          
         } catch (error) {
           console.error("❌ Error:", error);
         }
@@ -165,10 +217,15 @@
   </script>
 </head>
 <body>
+  
+    
   <div id="avatar"></div>
   <div id="chat-container">
     <div id="chat"></div>
   </div>
+
+  
+  
   <div id="controls">
     <input id="text" type="text" placeholder="Type your message...">
     <input id="send" type="button" value="Send">
